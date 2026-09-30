@@ -74,7 +74,7 @@ RUN echo "VARIANT=\"${OS_VARIANT}\"" >> /usr/lib/os-release \
 RUN <<EORUN
 set -xeuo pipefail
 
-dnf -y install @gnome-desktop openssh-server
+dnf -y install @gnome-desktop openssh-server iwlwifi-mvm-firmware
 
 systemctl enable sshd
 
