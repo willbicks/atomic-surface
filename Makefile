@@ -3,6 +3,9 @@ IMG_CHUNKED ?= localhost/fedora-surface:chunked
 OUTPUT      ?= output
 CONFIG      ?= config.toml
 
+IMG_INSTALLER     ?= localhost/fedora-surface:installer
+INSTALLER_PAYLOAD ?= $(IMG_OUT)
+
 IMG_BUILDER    ?= quay.io/centos-bootc/bootc-image-builder:latest
 IMG_RECHUNKER  ?= quay.io/centos-bootc/centos-bootc:stream10
 
@@ -11,7 +14,7 @@ VM_CPUS    ?= 2
 
 .SUFFIXES:
 .DEFAULT_GOAL := build
-.PHONY: all build rechunk disk run clean
+.PHONY: all build rechunk disk run installer installer-img run-iso clean
 
 all: rechunk disk
 
@@ -64,6 +67,41 @@ run: disk
 	    -bios /usr/share/OVMF/OVMF_CODE.fd \
 	    -serial stdio \
 	    -snapshot $(OUTPUT)/qcow2/disk.qcow2
+
+# Build the installer image
+installer-img: build
+	sudo podman build \
+	    --build-arg PAYLOAD_IMAGE=$(INSTALLER_PAYLOAD) \
+	    -f Containerfile-installer -t $(IMG_INSTALLER) .
+
+## Build the bootc-installer ISO
+installer: installer-img
+	mkdir -p $(OUTPUT)
+	sudo podman run \
+	    --rm \
+	    -it \
+	    --privileged \
+	    --pull=newer \
+	    --security-opt label=type:unconfined_t \
+	    -v $(CURDIR)/$(OUTPUT):/output \
+	    -v $(CURDIR)/$(CONFIG):/config.toml:ro \
+	    -v /var/lib/containers/storage:/var/lib/containers/storage \
+	    $(IMG_BUILDER) \
+	    --type bootc-installer \
+		--rootfs ext4 \
+	    --installer-payload-ref $(INSTALLER_PAYLOAD) \
+	    $(IMG_INSTALLER)
+
+## Boot the bootc-installer ISO in QEMU
+run-iinstaller: installer
+	qemu-system-x86_64 \
+	    -M accel=kvm \
+	    -cpu host \
+	    -smp $(VM_CPUS) \
+	    -m $(VM_MEM) \
+	    -bios /usr/share/OVMF/OVMF_CODE.fd \
+	    -serial stdio \
+	    -cdrom $(OUTPUT)/iso/install.iso
 
 clean:
 	rm -rf $(OUTPUT)
