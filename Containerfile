@@ -77,6 +77,22 @@ set -xeuo pipefail
 dnf -y install @gnome-desktop openssh-server iwlwifi-mvm-firmware
 
 systemctl enable sshd
+systemctl enable gdm
+
+cat > /usr/lib/systemd/system-generators/90-graphical-default <<'EOF'
+#!/bin/bash
+current=$(readlink /etc/systemd/system/default.target 2>/dev/null) || true
+[ -n "$current" ] || current=$(readlink /run/systemd/system/default.target 2>/dev/null) || true
+[ -n "$current" ] || current=$(readlink /usr/lib/systemd/system/default.target 2>/dev/null) || true
+case "${current##*/}" in
+	graphical.target) exit 0 ;;
+esac
+out="${2:-$1}"
+[ -n "$out" ] || exit 0
+ln -sfn /usr/lib/systemd/system/graphical.target "$out/default.target"
+exit 0
+EOF
+chmod +x /usr/lib/systemd/system-generators/90-graphical-default
 
 # Clean up unnecessary files
 dnf clean all
