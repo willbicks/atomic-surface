@@ -15,6 +15,11 @@ IMG_RECHUNKER  ?= quay.io/centos-bootc/centos-bootc:stream10
 VM_MEM     ?= 8192
 VM_CPUS    ?= 2
 
+PRIV_BUILD ?= --isolation=chroot --cap-add=all \
+              --security-opt label=type:unconfined_t \
+              --security-opt seccomp=unconfined
+PRIV_RUN   ?= --privileged --security-opt label=type:unconfined_t
+
 .SUFFIXES:
 .DEFAULT_GOAL := build
 .PHONY: all build base silverblue mine rechunk disk run installer installer-img run-iinstaller clean
@@ -25,36 +30,26 @@ build: mine
 
 base:
 	sudo podman build -f base.containerfile \
-		--isolation=chroot \
-		--cap-add=all \
-		--security-opt label=type:unconfined_t \
-		--security-opt seccomp=unconfined \
+		$(PRIV_BUILD) \
 		-t $(IMG_BASE) .
 
 silverblue: base
 	sudo podman build -f silverblue.containerfile \
 		--build-arg BASE_IMAGE=$(IMG_BASE) \
-		--isolation=chroot \
-		--cap-add=all \
-		--security-opt label=type:unconfined_t \
-		--security-opt seccomp=unconfined \
+		$(PRIV_BUILD) \
 		-t $(IMG_SILVERBLUE) .
 
 mine: silverblue
 	sudo podman build -f mine.containerfile \
 		--build-arg SILVERBLUE_IMAGE=$(IMG_SILVERBLUE) \
-		--isolation=chroot \
-		--cap-add=all \
-		--security-opt label=type:unconfined_t \
-		--security-opt seccomp=unconfined \
+		$(PRIV_BUILD) \
 		-t $(IMG_OUT) .
 
 ## Rechunk the image in-place storage via bootc-base-imagectl
 rechunk: build
 	sudo podman run \
 	    --rm \
-	    --privileged \
-	    --security-opt label=type:unconfined_t \
+	    $(PRIV_RUN) \
 	    -v /var/lib/containers:/var/lib/containers \
 	    $(IMG_RECHUNKER) \
 	    /usr/libexec/bootc-base-imagectl rechunk \
@@ -67,9 +62,8 @@ disk: build
 	sudo podman run \
 	    --rm \
 	    -it \
-	    --privileged \
 	    --pull=newer \
-	    --security-opt label=type:unconfined_t \
+	    $(PRIV_RUN) \
 	    -v $(CURDIR)/$(CONFIG):/config.toml:ro \
 	    -v $(CURDIR)/$(OUTPUT):/output \
 	    -v /var/lib/containers/storage:/var/lib/containers/storage \
@@ -102,9 +96,8 @@ installer: installer-img
 	sudo podman run \
 	    --rm \
 	    -it \
-	    --privileged \
 	    --pull=newer \
-	    --security-opt label=type:unconfined_t \
+	    $(PRIV_RUN) \
 	    -v $(CURDIR)/$(OUTPUT):/output \
 	    -v $(CURDIR)/$(CONFIG):/config.toml:ro \
 	    -v /var/lib/containers/storage:/var/lib/containers/storage \
