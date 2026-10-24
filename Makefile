@@ -1,7 +1,10 @@
-IMG_OUT     ?= localhost/fedora-surface:latest
-IMG_CHUNKED ?= localhost/fedora-surface:chunked
-OUTPUT      ?= output
-CONFIG      ?= config.toml
+IMG_BASE       ?= localhost/fedora-surface-base:latest
+IMG_SILVERBLUE ?= localhost/fedora-surface-silverblue:latest
+IMG_OUT        ?= localhost/fedora-surface:latest
+IMG_CHUNKED    ?= localhost/fedora-surface:chunked
+
+OUTPUT         ?= output
+CONFIG         ?= config.toml
 
 IMG_INSTALLER     ?= localhost/fedora-surface:installer
 INSTALLER_PAYLOAD ?= $(IMG_OUT)
@@ -14,13 +17,32 @@ VM_CPUS    ?= 2
 
 .SUFFIXES:
 .DEFAULT_GOAL := build
-.PHONY: all build rechunk disk run installer installer-img run-iso clean
+.PHONY: all build base silverblue mine rechunk disk run installer installer-img run-iinstaller clean
 
 all: rechunk disk
 
-## Build the surface-kernel bootc image
-build:
-	sudo podman build -f Containerfile \
+build: mine
+
+base:
+	sudo podman build -f base.containerfile \
+		--isolation=chroot \
+		--cap-add=all \
+		--security-opt label=type:unconfined_t \
+		--security-opt seccomp=unconfined \
+		-t $(IMG_BASE) .
+
+silverblue: base
+	sudo podman build -f silverblue.containerfile \
+		--build-arg BASE_IMAGE=$(IMG_BASE) \
+		--isolation=chroot \
+		--cap-add=all \
+		--security-opt label=type:unconfined_t \
+		--security-opt seccomp=unconfined \
+		-t $(IMG_SILVERBLUE) .
+
+mine: silverblue
+	sudo podman build -f mine.containerfile \
+		--build-arg SILVERBLUE_IMAGE=$(IMG_SILVERBLUE) \
 		--isolation=chroot \
 		--cap-add=all \
 		--security-opt label=type:unconfined_t \
@@ -72,7 +94,7 @@ run: disk
 installer-img: build
 	sudo podman build \
 	    --build-arg PAYLOAD_IMAGE=$(INSTALLER_PAYLOAD) \
-	    -f Containerfile-installer -t $(IMG_INSTALLER) .
+	    -f installer.containerfile -t $(IMG_INSTALLER) .
 
 ## Build the bootc-installer ISO
 installer: installer-img

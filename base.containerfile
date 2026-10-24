@@ -1,4 +1,7 @@
-FROM quay.io/fedora/fedora-bootc:43 as builder
+# BASE image: bootable with surface kernel and wifi firmware.
+
+# Compile customized kernel
+FROM quay.io/fedora/fedora-bootc:43 AS builder
 
 ARG KERNEL_VERSION=6.19.8
 ARG KERNEL_MINOR=6.19
@@ -44,7 +47,7 @@ RUN git tag -a v${KERNEL_VERSION}-surface-wbicks -m "v${KERNEL_VERSION} + linux-
 RUN make olddefconfig && make -j"$(nproc)"
 
 # Generate the minimal root filesystem
-RUN /usr/libexec/bootc-base-imagectl build-rootfs /target-rootfs
+RUN /usr/libexec/bootc-base-imagectl build-rootfs --install iwlwifi-mvm-firmware /target-rootfs
 
 # Remove the distro kernel from the target rootfs rpmdb
 RUN dnf -y --installroot=/target-rootfs --releasever=43 remove 'kernel*' \
@@ -60,7 +63,7 @@ RUN krel=$(make -s kernelrelease) \
 		--kmoddir "/target-rootfs/usr/lib/modules/${krel}" \
 		"/target-rootfs/usr/lib/modules/${krel}/initramfs.img"
 
-# Begin scratch image creation
+# Begin base image creation
 FROM scratch
 
 ARG OS_VARIANT="Atomic Surface"
@@ -74,25 +77,7 @@ RUN echo "VARIANT=\"${OS_VARIANT}\"" >> /usr/lib/os-release \
 RUN <<EORUN
 set -xeuo pipefail
 
-dnf -y install @gnome-desktop openssh-server iwlwifi-mvm-firmware
-
-systemctl enable sshd
-systemctl enable gdm
-
-cat > /usr/lib/systemd/system-generators/90-graphical-default <<'EOF'
-#!/bin/bash
-current=$(readlink /etc/systemd/system/default.target 2>/dev/null) || true
-[ -n "$current" ] || current=$(readlink /run/systemd/system/default.target 2>/dev/null) || true
-[ -n "$current" ] || current=$(readlink /usr/lib/systemd/system/default.target 2>/dev/null) || true
-case "${current##*/}" in
-	graphical.target) exit 0 ;;
-esac
-out="${2:-$1}"
-[ -n "$out" ] || exit 0
-ln -sfn /usr/lib/systemd/system/graphical.target "$out/default.target"
-exit 0
-EOF
-chmod +x /usr/lib/systemd/system-generators/90-graphical-default
+echo "excludepkgs=kernel*" >> /etc/dnf/dnf.conf
 
 # Clean up unnecessary files
 dnf clean all
