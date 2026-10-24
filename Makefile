@@ -22,7 +22,7 @@ PRIV_RUN   ?= --privileged --security-opt label=type:unconfined_t
 
 .SUFFIXES:
 .DEFAULT_GOAL := build
-.PHONY: all build base silverblue mine rechunk disk run installer installer-img run-iinstaller clean
+.PHONY: all build base silverblue mine rechunk disk run installer installer-img run-installer clean
 
 all: rechunk disk
 
@@ -108,7 +108,7 @@ installer: installer-img
 	    $(IMG_INSTALLER)
 
 ## Boot the bootc-installer ISO in QEMU
-run-iinstaller: installer
+run-installer: installer
 	qemu-system-x86_64 \
 	    -M accel=kvm \
 	    -cpu host \
